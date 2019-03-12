@@ -17,8 +17,10 @@
   },
   "homepage": "https://github.com/geoSkogen/twilio-superclass#readme",
   "dependencies": {
+    "body-parser": "^1.18.3",
     "express": "^4.16.4",
     "fs-extra": "^7.0.1",
+    "hapi": "^18.1.0",
     "twilio": "^3.29.0"
   }
 }
