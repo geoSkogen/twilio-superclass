@@ -17,18 +17,28 @@ app.post('/sms', (req, res) => {
   var sender_num = req.body.From;
   var sender_body = req.body.Body;
   var users = ["+15033389275"];
-  var verbs = ["new","list","add","got","place","places"]
+  var verbs = ["add","got","place","places","list","new"]
+  var verbs_regex = [/add\s/i,/got\s/i,/place\s/i,/places\s?/i,/list\s?/i,/new\s?/i]
+  var regex;
   var result = false;
   var crud_cmd = "";
-  var buffer = "";
   var message = "";
+
   const twiml = new MessagingResponse();
+
+  /*
+  FUNCTIONS
+  */
 
   function putS(arg, data) {
     var props = [arg, "list"]
     var str = data;
+    var ex = "";
+    var regex;
     for (let i = 0; i < props.length; i++) {
-      str = str.replace(props[i] + " ", "");
+      ex = props[i] + "\s";
+      regex = new RegExp(ex,"i");
+      str = str.replace(regex, "");
     }
     var clean_str = str.replace(/(\s)+/g, " ");
     var input_arr = clean_str.split(" ");
@@ -37,7 +47,7 @@ app.post('/sms', (req, res) => {
   }
 
   function getS(data) {
-    var props = ["list"];
+    var props = []
     fs.readFile('./api.json', (err, data) => {
       var message = "";
       var data_obj = JSON.parse(data);
@@ -69,41 +79,43 @@ app.post('/sms', (req, res) => {
       console.log("saved " + path);
     });
   }
-
-
-    if (users.indexOf(sender_num) === -1) {
-      twiml.message('we don\'t know you');
-    } else {
-      for (let i = 0; i < verbs.length; i++) {
-        if (sender_body.indexOf(verbs[i]) != -1) {
-          crud_cmd = verbs[i];
-          break;
-        }
-      }
-      switch (crud_cmd) {
-        case "new" :
-          message = "got new";
-          break;
-        case "list" :
-          getS(sender_body);
-          break;
-        case "add" :
-          result = putS(crud_cmd, sender_body);
-          message = "got add\r\n";
-          message += result.list.join("\r\n");
-          httpResponse(message,true);
-          break;
-        case "got" :
-          result = putS(crud_cmd, sender_body);
-          message = "got got\r\n";
-          message += result.list.join("\r\n");
-          httpResponse(message,true);
-          break;
-        default:
-          message = "got default";
+  /*
+  MAIN
+  */
+  if (users.indexOf(sender_num) === -1) {
+    twiml.message('we don\'t know you');
+  } else {
+    for (let i = 0; i < verbs.length; i++) {
+      regex = new RegExp(verbs_regex[i]);
+      if (regex.test(sender_body)) {
+        crud_cmd = verbs[i];
+        break;
       }
     }
-});//ends sms post
+    switch (crud_cmd) {
+      case "new" :
+        message = "got new";
+        break;
+      case "list" :
+        getS(sender_body);
+        break;
+      case "add" :
+        result = putS(crud_cmd, sender_body);
+        message = "got add\r\n";
+        message += result.list.join("\r\n");
+        httpResponse(message,true);
+        break;
+      case "got" :
+        result = putS(crud_cmd, sender_body);
+        message = "got got\r\n";
+        message += result.list.join("\r\n");
+        httpResponse(message,true);
+        break;
+      default:
+        message = "This is sweetList - at your service.";
+      }
+    }
+  });//ends sms post
 
 app.get('/sms', (req, res) => {
   res.writeHead( 200, { 'Content-Type': 'text/html' });
