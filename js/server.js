@@ -1,10 +1,14 @@
+'use strict'
+
 const http = require('http');
 const express = require('express');
 const bodyParser = require('body-parser');
 const MessagingResponse = require('twilio').twiml.MessagingResponse;
 const fs = require('fs-extra');
+const mkdirp = require('mkdirp');
 
 const app = express();
+
 app.use(bodyParser.urlencoded({ extended: false }))
 
 app.get('/', (req, res) => {
@@ -25,43 +29,83 @@ app.post('/sms', (req, res) => {
   var message = "";
 
   const twiml = new MessagingResponse();
-
   /*
   FUNCTIONS
   */
+  function putS(arg, input) {
 
-  function putS(arg, data) {
-    var props = [arg, "list"]
-    var str = data;
-    var ex = "";
-    var regex;
-    for (let i = 0; i < props.length; i++) {
-      ex = props[i] + "\s";
-      regex = new RegExp(ex,"i");
-      str = str.replace(regex, "");
-    }
-    var clean_str = str.replace(/(\s)+/g, " ");
-    var input_arr = clean_str.split(" ");
-    var list = { "list" : input_arr };
-    return list;
-  }
-
-  function getS(data) {
-    var props = []
-    fs.readFile('./api.json', (err, data) => {
-      var message = "";
-      var data_obj = JSON.parse(data);
-      if (err) { throw err }
-      for (let i = 0; i < props.length; i++) {
-        message += (data.length) ?
-          props[i] + "\r\n\t" + data_obj[props[i]].join("\r\t") + "\r\n" :
-          "(empty)";
+    function getListDiffs(got_arr, added_arr) {
+      var new_arr = [];
+      var ex = "";
+      var regex;
+      for (let i = 0; i < added_arr.length; i++) {
+        if (added_arr.indexOf(got_arr[i]) === -1 ) {
+          new_arr.push(added_arr[i]);
+        }
       }
-      httpResponse(message,false);
+      return new_arr;
+    }
+
+    var props = []
+    var str = "";
+    var data_obj = {}
+    var regex;
+    var resp_log = "";
+
+    fs.readFile('./api.json', (err, data) => {
+      if (err) { throw err }
+      if (data.length) {
+        data_obj = JSON.parse(data);
+        props = Object.keys(data_obj);
+      } else {
+        props.push("list");
+      }
+      props.push(arg);
+      for (let i = 0; i < props.length; i++) {
+        regex = new RegExp(props[i],"i");
+        console.log("regex for " + props[i] + ":" + regex)
+        console.log("test result: " + regex.test(input))
+        str = input.replace(regex, "");
+      }
+      var clean_str = str.replace(/(\s)+/g, " ");
+      var clean_str = clean_str.replace(/^(\s)+/,"");
+      var input_arr = clean_str.split(" ");
+      switch (arg) {
+        case "add" :
+          console.log("got add")
+          result = { "list" : (data_obj.list + "," + input_arr).split(",") };
+          resp_log = "SimpleList added: " + clean_str + " to " + "list.";
+          break;
+        case "got" :
+          result = { "list" : getListDiffs(input_arr, data_obj.list)};
+          resp_log = "SimpleList removed: " + clean_str + " from " + "list.";
+          break;
+        default :
+          result = { "list" : ["error"] }
+          resp_log = "SimpleList noticed: " + clean_str + " was " + "wack.";
+        }
+        httpResponse(resp_log, result, true);
     })
   }
 
-  function httpResponse(message, save) {
+  function getS(data) {
+    fs.readFile('./api.json', (err, data) => {
+      if (err) { throw err }
+      if (data.length) {
+        var data_obj = JSON.parse(data);
+        var props = Object.keys(data_obj);
+        var message = "";
+        for (let i = 0; i < props.length; i++) {
+          message += props[i] + "\r\n\t" + data_obj[props[i]].join("\r\n\t") + "\r\n";
+        }
+      } else {
+        message = "list\r\n\t(empty)";
+      }
+      httpResponse(message, result, false);
+    })
+  }
+
+  function httpResponse(message, result, save) {
     twiml.message(message);
     res.writeHead(200, {'Content-Type': 'text/xml'});
     res.end(twiml.toString());
@@ -100,19 +144,14 @@ app.post('/sms', (req, res) => {
         getS(sender_body);
         break;
       case "add" :
-        result = putS(crud_cmd, sender_body);
-        message = "got add\r\n";
-        message += result.list.join("\r\n");
-        httpResponse(message,true);
+        putS(crud_cmd, sender_body);
         break;
       case "got" :
-        result = putS(crud_cmd, sender_body);
-        message = "got got\r\n";
-        message += result.list.join("\r\n");
-        httpResponse(message,true);
+        putS(crud_cmd, sender_body);
         break;
-      default:
-        message = "This is sweetList - at your service.";
+      default :
+        message = "This is SimpleList \r\n - at your service.";
+        httpResponse(message, result, false);
       }
     }
   });//ends sms post
